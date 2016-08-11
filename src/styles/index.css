@@ -1,0 +1,9 @@
+.icon { top: 6px; }
+li { list-style-type: none; }
+ul, td { padding: 0; }
+.columnLabels { height: 100%; }
+.ghost { opacity: .5; background: #C8EBFB; }
+.glyphicon { color: #000; cursor: pointer; }
+.glyphicon-chevron-down, .glyphicon-chevron-up { left: 2px; top: 2px; }
+.list-group-item { border-radius: 0px; width: 120px; padding: 10px 10px;}
+.paramHeader { min-width: 80px; }
