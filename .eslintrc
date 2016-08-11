@@ -1,0 +1,5 @@
+{
+  "extends": [
+    "./node_modules/djs-dev-tools/node_modules/djs-lint/config/minimum-node.json"
+  ]
+}
