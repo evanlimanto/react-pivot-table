@@ -52,7 +52,11 @@ const fieldTarget = {
         const endAxis = component.props.axis;
 
         if (props.moveField(startAxis, endAxis, dragIndex, hoverIndex)) {
-            if (!_.eq(startAxis, DATA_AXIS)) {
+            if (_.eq(endAxis, DATA_AXIS)) {
+                monitor.getItem().axis = 1 - startAxis;
+                monitor.getItem().index = 0;
+            }
+            else {
                 monitor.getItem().axis = endAxis;
                 monitor.getItem().index = hoverIndex;
             }

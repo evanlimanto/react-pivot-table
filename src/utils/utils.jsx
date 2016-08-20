@@ -92,3 +92,10 @@ export function sortDataRows(data, fieldInfo, fieldToIndex) {
     return _.unzip(dataCopy);
 }
 
+export function addToListInDict(dict, key, item) {
+    if (!(key in dict)) {
+        dict[key] = [];
+    }
+    dict[key].push(item);
+}
+

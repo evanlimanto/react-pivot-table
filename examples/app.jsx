@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { PropTypes } from 'react';
 import ReactDOM from 'react-dom';
 import { Grid } from 'react-bootstrap';
 
 import { PivotTable } from '../src/components';
 
 const useRealData = false;
+
+const _ = require('lodash');
 
 const COLUMNS = ['date', 'z_is_latte', 'z_exchange', 'z_site', 'z_dolord', 'z_doldon'];
 const X_AXIS = ['z_exchange', 'z_site'];
@@ -98,23 +100,42 @@ const DATA = [['Any_date', 'Any_date', 'Any_date', 'Any_date', 'Any_date', 'Any_
 , '25.689', '25.689', '15.786', '15.786', '9.904', '9.904', '97.518', '9.837'
 , '87.681', '63.844', '9.837', '54.007', '33.674', '33.674']];
 
-if (useRealData) {
-    generateRealData();
-} else {
-    const App = () => (
-      <Grid>
-        <PivotTable
-            data={DATA}
-            fieldLabels={COLUMNS}
-            xAxis={X_AXIS}
-            yAxis={Y_AXIS}
-            dataFields={DATA_FIELDS}
-        />
-      </Grid>
-    );
+class App extends React.Component {
+    constructor(props) {
+        super(props);
+        this.updateState = this.updateState.bind(this);
+        this.state = {dict: {}};
+    }
 
-    ReactDOM.render(
-      <App />,
-      document.getElementById('app')
-    );
+    updateState(dict) {
+        const dictCopy = _.cloneDeep(dict);
+        this.setState({ dict: dictCopy });
+    }
+
+    render() {
+        console.log(this.state.dict);
+        const dictStr = Object.keys(this.state.dict).map(key => {
+            const value = _.join(this.state.dict[key]);
+            return <p>"<b>{key}</b>" : {value}</p>;
+        });
+        return (
+          <Grid>
+            <br/>{dictStr}<br/>
+            <PivotTable
+                data={DATA}
+                fieldLabels={COLUMNS}
+                xAxis={X_AXIS}
+                yAxis={Y_AXIS}
+                dataFields={DATA_FIELDS}
+                selectCallback={this.updateState}
+            />
+          </Grid>
+        );
+    }
 }
+
+ReactDOM.render(
+  <App />,
+  document.getElementById('app')
+);
+

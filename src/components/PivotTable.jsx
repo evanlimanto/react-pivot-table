@@ -11,7 +11,7 @@ import { DragDropContext } from 'react-dnd';
 
 import { Field, SelectableCell } from '../components';
 import { COLOR_SCHEME, X_AXIS, Y_AXIS, DATA_AXIS } from '../consts';
-import { sortDataRows, getTableMapping } from '../utils';
+import { addToListInDict, sortDataRows, getTableMapping } from '../utils';
 
 const _ = require('lodash');
 
@@ -37,6 +37,8 @@ class PivotTable extends React.Component {
      * @param {array} dataFields - The list of data header names.
      * @param {array} data - The 2-D array of data to be displayed in the PivotTable.
      *                       Each element of this array is a column in table.
+     * @param {array} selectCallback - The callback function triggered every time cells
+     *                                 are selected.
      */
     constructor(props) {
         super(props);
@@ -100,6 +102,7 @@ class PivotTable extends React.Component {
             // resulting in filling the empty axis.
             if (_.eq(endAxis, DATA_AXIS)) {
                 if (_.eq(fieldList[1 - startAxis].length, 0)) {
+                    hoverIndex = 0;
                     endAxis = 1 - startAxis;
                 }
                 else {
@@ -215,6 +218,9 @@ class PivotTable extends React.Component {
      * @param {boolean} checkParent - Whether to check the parent of this span for selection.
      */
     isInSelected(fieldIndex, itemIndex, axisIndex, checkParent = false) {
+        if (_.eq(fieldIndex, -1)) {
+            return true;
+        }
         const spans = _.eq(axisIndex, X_AXIS) ? this.cache.colSpans : this.cache.rowSpans;
         const curSelected = this.state.selected[axisIndex];
         // Nothing in this field is selected.
@@ -250,8 +256,10 @@ class PivotTable extends React.Component {
      * @param {number} itemIndex - The index of the header being clicked in the row or column.
      * @param {boolean} removeUpstream - removes the selection up repeatedly until
                                          the current field only has a single item selected.
+     * @param {boolean} removeInRange - whether to remove the cells that contain or do not contain
+     *                                  this cell from selection.
      */
-    removeSelected(fieldIndex, itemIndex, axisIndex, removeUpstream = false) {
+    removeSelected(fieldIndex, itemIndex, axisIndex, removeUpstream = false, removeInRange = true) {
         const spans = _.eq(axisIndex, X_AXIS) ? this.cache.colSpans : this.cache.rowSpans;
         const curSelected = this.state.selected[axisIndex];
         if (!(fieldIndex in curSelected)) {
@@ -279,26 +287,73 @@ class PivotTable extends React.Component {
         _.forIn(spans[fieldIndex], rowSpan => {
             const endFieldIter = fieldIter + rowSpan;
             // Find the span which covers this itemIndex.
-            if (_.inRange(itemIndex, fieldIter, endFieldIter)) {
-                for (let j = fieldIter; j < endFieldIter; j++) {
-                    if (curSelected[fieldIndex].has(j)) {
-                        curSelected[fieldIndex].delete(j);
+            if (_.eq(_.inRange(itemIndex, fieldIter, endFieldIter), removeInRange)) {
+                for (let i = fieldIter; i < endFieldIter; i++) {
+                    if ((fieldIndex in curSelected) && curSelected[fieldIndex].has(i)) {
+                        curSelected[fieldIndex].delete(i);
                         if (_.eq(curSelected[fieldIndex].size, 0)) {
                             delete curSelected[fieldIndex];
                             break;
                         }
                         if (removeUpstream) {
-                            this.removeSelected(fieldIndex - 1, itemIndex, axisIndex, removeUpstream);
+                            this.removeSelected(fieldIndex - 1, i, axisIndex, removeUpstream);
                         }
-                        else {
-                            // Clear all subsequent fields if we are clearing this field.
-                            this.removeSelected(fieldIndex + 1, j, axisIndex);
-                        }
+                        // Clear all subsequent fields if we are clearing this field.
+                        this.removeSelected(fieldIndex + 1, i, axisIndex);
                     }
                 }
             }
             fieldIter = endFieldIter;
         });
+    }
+
+    triggerSelectCallback() {
+        const selectedItems = {};
+        const { rowSpans, colSpans, colFields, rowFields } = this.cache;
+        const { xAxis, yAxis } = this.state;
+        const numXLabels = this.state.xAxis.length;
+        const numYLabels = this.state.yAxis.length;
+        const curSelectedX = this.state.selected[0];
+        const curSelectedY = this.state.selected[1];
+        // Handle selected cells in the y-axis.
+        _.range(numYLabels).map(fieldIndex => {
+            if (fieldIndex in curSelectedY) {
+                let fieldPos = 0;
+                let fieldIter = 0;
+                _.forIn(rowSpans[fieldIndex], rowSpan => {
+                    const endFieldIter = fieldIter + rowSpan;
+                    for (let i = fieldIter; i < endFieldIter; i++) {
+                        if (curSelectedY[fieldIndex].has(i)) {
+                            const headerVal = rowFields[fieldIndex][fieldPos];
+                            addToListInDict(selectedItems, yAxis[fieldIndex].name, headerVal);
+                            break;
+                        }
+                    }
+                    fieldIter = endFieldIter;
+                    fieldPos++;
+                });
+            }
+        });
+        // Handle selected cells in the x-axis.
+        _.range(numXLabels).map(fieldIndex => {
+            if (fieldIndex in curSelectedX) {
+                let fieldPos = 0;
+                let fieldIter = 0;
+                _.forIn(colSpans[fieldIndex], colSpan => {
+                    const endFieldIter = fieldIter + colSpan;
+                    for (let i = fieldIter; i < endFieldIter; i++) {
+                        if (curSelectedX[fieldIndex].has(i)) {
+                            const headerVal = colFields[fieldIndex][fieldPos];
+                            addToListInDict(selectedItems, xAxis[fieldIndex].name, headerVal);
+                            break;
+                        }
+                    }
+                    fieldIter = endFieldIter;
+                    fieldPos++;
+                });
+            }
+        });
+        this.props.selectCallback(selectedItems);
     }
 
     /**
@@ -313,16 +368,17 @@ class PivotTable extends React.Component {
         let newSelected = {};
         newSelected[X_AXIS] = {};
         newSelected[Y_AXIS] = {};
-        const maxFieldRow = parseInt(_.max(_.keys(curSelected)) || -1, 10);
+        const maxFieldIndex = parseInt(_.max(_.keys(curSelected)) || -1, 10);
         // If the user pressed the control key, and if there is nothing selected or if
         // this field is the largest being selected and there is an item selected in this field,
         // process the event.
         if (event.ctrlKey && (_.eq(_.size(curSelected), 0) ||
-                             (_.eq(maxFieldRow, fieldIndex) && this.isInSelected(fieldIndex - 1, itemIndex, axisIndex, true)))) {
+                              (_.eq(maxFieldIndex, fieldIndex) &&
+                               this.isInSelected(fieldIndex - 1, itemIndex, axisIndex, true)))) {
             newSelected[axisIndex] = curSelected;
             if (this.isInSelected(fieldIndex, itemIndex, axisIndex)) {
                 // If this item is selected, remove this item from selection.
-                const removeUpstream = _.gt(_.size(curSelected), 0) && _.gt(_.size(curSelected[maxFieldRow]), 1);
+                const removeUpstream = _.gt(_.size(curSelected), 0) && _.gt(_.size(curSelected[maxFieldIndex]), 1);
                 this.removeSelected(fieldIndex, itemIndex, axisIndex, removeUpstream);
             }
             else {
@@ -333,10 +389,17 @@ class PivotTable extends React.Component {
                     }
                     newSelected[axisIndex][i].add(itemIndex);
                 });
+                // Remove different buckets that are currently selected.
+                if (fieldIndex > 0) {
+                    for (let i = 0; i < this.props.data[0].length; i++) {
+                        this.removeSelected(fieldIndex - 1, itemIndex, axisIndex, true, false);
+                    }
+                }
             }
         }
-        else {
-            // If not control key was pressed, clear all current selections and
+        else if (!(_.eq(fieldIndex, maxFieldIndex) && _.eq(curSelected[maxFieldIndex].size, 1) &&
+                   this.isInSelected(fieldIndex, itemIndex, axisIndex))) {
+            // If control key wasn't pressed, clear all current selections and
             // start anew.
             _.forIn(_.range(fieldIndex + 1), i => {
                 if (!_.has(newSelected[axisIndex], i)) {
@@ -349,7 +412,7 @@ class PivotTable extends React.Component {
         newSelected[1 - axisIndex] = this.state.selected[1 - axisIndex];
         this.setState({
             selected: newSelected
-        });
+        }, this.triggerSelectCallback);
     }
 
     /**
@@ -612,10 +675,11 @@ class PivotTable extends React.Component {
                         const colPositions = _.range(colIndices.length).map(() => 0);
                         // Denotes the span index we are processing right now.
                         const colIters = _.range(colIndices.length).map(() => 0);
-                        // Generate the row data for the current data field, by iterating
-                        // through each data column.
                         let rowData;
                         if (numXLabels > 0) {
+                            /* Handles the case where there are fields in both the x-axis and y-axis. */
+                            // Generate the row data for the current data field, by iterating
+                            // through each data column.
                             rowData = _.range(_.sum(colSpans[0])).map(colIndex => {
                                 const primaryKey = colIters.reduce((lst, colIter, i) => {
                                     lst.push(colFields[i][colIter]);
@@ -634,6 +698,7 @@ class PivotTable extends React.Component {
                             });
                         }
                         else {
+                            /* Handles the case where there are fields in only the y-axis. */
                             const dataValue = this.getCellContents(dataMap, [''], secondaryKey, dataIndex);
                             const style = { backgroundColor: COLOR_SCHEME.body[rowIndex % 2][0],
                                             textAlign: 'right' };
@@ -661,10 +726,11 @@ class PivotTable extends React.Component {
                     const colPositions = _.range(colIndices.length).map(() => 0);
                     // Denotes the span index we are processing right now.
                     const colIters = _.range(colIndices.length).map(() => 0);
-                    // Generate the data for the current row by iterating through the number
-                    // of columns.
                     let rowData;
                     if (numXLabels > 0) {
+                        // Generate the data for the current row by iterating through the number
+                        // of columns.
+                        /* Handles the case where there are fields in both the x-axis and y-axis. */
                         rowData = _.range(_.sum(colSpans[0])).map(colIndex => {
                             let lastColPosition;  
                             const primaryKey = colIters.reduce((lst, colIter, i) => {
@@ -688,6 +754,7 @@ class PivotTable extends React.Component {
                         });
                     }
                     else {
+                        /* Handles the case where there are fields in only the y-axis. */
                         rowData = _.range(dataFields.length).map(dataFieldIndex => {
                             const dataIndex = dataIndices[dataFieldIndex % dataFields.length];
                             const dataValue = this.getCellContents(dataMap, [''], secondaryKey, dataIndex);
