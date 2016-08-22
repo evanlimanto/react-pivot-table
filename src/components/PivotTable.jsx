@@ -39,6 +39,7 @@ class PivotTable extends React.Component {
      *                       Each element of this array is a column in table.
      * @param {array} selectCallback - The callback function triggered every time cells
      *                                 are selected.
+     * @param {object} selection - The initial state of selected items in the PivotTable.
      */
     constructor(props) {
         super(props);
@@ -58,13 +59,77 @@ class PivotTable extends React.Component {
             yAxis,
             dataFields,
             selected,
-            dataHeaderAxis
+            dataHeaderAxis,
+            hasComputedInitialState: false
         };
 
         this.invertOrder = this.invertOrder.bind(this);
         this.moveField = this.moveField.bind(this);
         this.onBucketClick = this.onBucketClick.bind(this);
         this.flipDataAxis = this.flipDataAxis.bind(this);
+    }
+
+    /**
+     * Computes the initial cells that are selected from the selection prop passed
+     * into the PivotTable.
+     */
+    computeInitialSelectedState() {
+        const { rowSpans, colSpans, colFields, rowFields } = this.cache;
+        const { xAxis, yAxis } = this.state;
+        const numXLabels = this.state.xAxis.length;
+        const numYLabels = this.state.yAxis.length;
+        const curSelectedX = this.state.selected[0];
+        const curSelectedY = this.state.selected[1];
+        const selectedItems = _.mapValues(this.props.selected, value => new Set(_.split(value, ',')));
+
+        // Handle selected items in the y-axis.
+        _.range(numYLabels).map(fieldIndex => {
+            const fieldName = yAxis[fieldIndex].name;
+            if (fieldName in selectedItems) {
+                let fieldPos = 0;
+                let fieldIter = 0;
+                // Find row span with header value in selectedItems.
+                _.forIn(rowSpans[fieldIndex], rowSpan => {
+                    const endFieldIter = fieldIter + rowSpan;
+                    const headerVal = rowFields[fieldIndex][fieldPos];
+                    // Check if this header value is selected, and that its parent is also selected.
+                    if (selectedItems[fieldName].has(headerVal) &&
+                        (_.eq(fieldIndex, 0) || this.isInSelected(fieldIndex - 1, fieldIter, Y_AXIS))) {
+                        if (!(fieldIndex in curSelectedY)) {
+                            curSelectedY[fieldIndex] = new Set();
+                        }
+                        curSelectedY[fieldIndex].add(fieldIter);
+                    }
+                    fieldIter = endFieldIter;
+                    fieldPos++;
+                });
+            }
+        });
+
+        // Handle selected items in the x-axis.
+        _.range(numXLabels).map(fieldIndex => {
+            const fieldName = xAxis[fieldIndex].name;
+            if (fieldName in selectedItems) {
+                let fieldPos = 0;
+                let fieldIter = 0;
+                // Find col span with header value in selectedItems.
+                _.forIn(colSpans[fieldIndex], colSpan => {
+                    const endFieldIter = fieldIter + colSpan;
+                    const headerVal = colFields[fieldIndex][fieldPos];
+                    // Check if this header value is selected, and that its parent is also selected.
+                    if (selectedItems[fieldName].has(headerVal) &&
+                        (_.eq(fieldIndex, 0) || this.isInSelected(fieldIndex - 1, fieldIter, X_AXIS))) {
+                        if (!(fieldIndex in curSelectedX)) {
+                            curSelectedX[fieldIndex] = new Set();
+                        }
+                        curSelectedX[fieldIndex].add(fieldIter);
+                    }
+                    fieldIter = endFieldIter;
+                    fieldPos++;
+                });
+            }
+        });
+        this.state.hasComputedInitialState = true;
     }
 
     /**
@@ -364,6 +429,11 @@ class PivotTable extends React.Component {
      * @param {number} axisIndex - Whether we are processing the x or y axis.
      */
     onBucketClick(event, fieldIndex, itemIndex, axisIndex) {
+        // Don't process event if no select callback is passed in as a prop.
+        if (!this.props.selectCallback) {
+            return;
+        }
+
         const curSelected = this.state.selected[axisIndex];
         let newSelected = {};
         newSelected[X_AXIS] = {};
@@ -853,6 +923,9 @@ class PivotTable extends React.Component {
 
     render() {
         this.updateCache();
+        if (!this.state.hasComputedInitialState) {
+            this.computeInitialSelectedState();
+        }
         const header = this.getTableHeader();
         const body = this.getTableBody();
         return (

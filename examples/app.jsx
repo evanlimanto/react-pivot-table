@@ -113,11 +113,16 @@ class App extends React.Component {
     }
 
     render() {
-        console.log(this.state.dict);
         const dictStr = Object.keys(this.state.dict).map(key => {
             const value = _.join(this.state.dict[key]);
             return <p>"<b>{key}</b>" : {value}</p>;
         });
+        const selected = {
+            'date': 'Any_date',
+            'z_is_latte': 'Y,N',
+            'z_exchange': 'CHI_X',
+            'z_site': 'fra,guas,ld4'
+        };
         return (
           <Grid>
             <br/>{dictStr}<br/>
@@ -128,6 +133,7 @@ class App extends React.Component {
                 yAxis={Y_AXIS}
                 dataFields={DATA_FIELDS}
                 selectCallback={this.updateState}
+                selected={selected}
             />
           </Grid>
         );
