@@ -56,7 +56,7 @@ const fieldTarget = {
                 monitor.getItem().axis = 1 - startAxis;
                 monitor.getItem().index = 0;
             }
-            else {
+            else if (!_.eq(startAxis, DATA_AXIS)) {
                 monitor.getItem().axis = endAxis;
                 monitor.getItem().index = hoverIndex;
             }
