@@ -1,11 +1,15 @@
 import React, { PropTypes } from 'react';
 import ReactDOM from 'react-dom';
-import { Grid } from 'react-bootstrap';
+import { Grid, FormGroup, ControlLabel, FormControl, Button } from 'react-bootstrap';
+import { initialize, getOrCreateKernel } from 'desco-jupyter-js';
+import multiline from 'multiline';
+import Convert from 'ansi-to-html';
 
 import { PivotTable } from '../src/components';
 
-const useRealData = false;
+require('./index.css');
 
+const convert = new Convert;
 const _ = require('lodash');
 
 const COLUMNS = ['date', 'z_is_latte', 'z_exchange', 'z_site', 'z_dolord', 'z_doldon'];
@@ -100,11 +104,49 @@ const DATA = [['Any_date', 'Any_date', 'Any_date', 'Any_date', 'Any_date', 'Any_
 , '25.689', '25.689', '15.786', '15.786', '9.904', '9.904', '97.518', '9.837'
 , '87.681', '63.844', '9.837', '54.007', '33.674', '33.674']];
 
+const exampleCode =
+`import numpy as np
+
+numbers = [1, 2, 3, 4, 5]
+names = ['John', 'Gary', 'Mary', 'Jane', 'Max']
+prices = [1.00, 2.00, 3.00, 4.00, 5.00]
+colors = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Indigo', 'Violet']
+exchanges = ['NYSE', 'NASDAQ', 'ARCA', 'EDGX', 'IEX']
+states = ['New York', 'California', 'Florida', 'Texas', 'Alaska']
+
+n = 20
+data = [
+    list(np.random.choice(numbers, n, True)),
+    list(np.random.choice(names, n, True)),
+    list(np.random.choice(prices, n, True)),
+    list(np.random.choice(colors, n, True)),
+    list(np.random.choice(exchanges, n, True)),
+    list(np.random.choice(states, n, True))
+];
+field_labels = ['numbers', 'names', 'prices', 'colors', 'exchanges', 'states']
+x_axis = ['numbers', 'names']
+y_axis = ['colors', 'exchanges']
+data_fields = ['prices', 'states']
+
+return {'data': data, 'field_labels': field_labels, 'x_axis': x_axis, 'y_axis': y_axis, 'data_fields': data_fields}
+`;
+
 class App extends React.Component {
     constructor(props) {
         super(props);
         this.updateState = this.updateState.bind(this);
-        this.state = {dict: {}};
+        this.state = {
+            dict: {},
+            data: DATA,
+            fieldLabels: COLUMNS,
+            xAxis: X_AXIS,
+            yAxis: Y_AXIS,
+            dataFields: DATA_FIELDS,
+            selectCallback: this.updateState,
+            selected: {},
+            errorText: ''
+        };
+        this.onSubmit = this.onSubmit.bind(this);
     }
 
     updateState(dict) {
@@ -112,29 +154,90 @@ class App extends React.Component {
         this.setState({ dict: dictCopy });
     }
 
+    onSubmit(e) {
+        e.preventDefault();
+        initialize({ usecase: 'PivotTable' })
+            .then(() => getOrCreateKernel({ instanceId: 'PivotTable' }))
+            .then(kernel => {
+                let code = ReactDOM.findDOMNode(this.pythonCode).value;
+                code = _.join(_.map(_.split(code, '\n'), line => '\t' + line), '\n');
+                code = `from IPython.display import JSON\ndef func():\n${code}\nJSON(func())`;
+                kernel.execute(code).then(kernelResult => {
+                    console.log(kernelResult);
+                    if (kernelResult.result === undefined) {
+                        this.setState({
+                            errorText: kernelResult.traceback[0]
+                        });
+                    }
+                    else {
+                        const result = kernelResult.result['application/json'];
+                        const data = result.data;
+                        const dataFields = result.data_fields;
+                        const fieldLabels = result.field_labels;
+                        const xAxis = result.x_axis;
+                        const yAxis = result.y_axis;
+                        this.shouldUpdateState = true;
+                        this.setState({
+                            data,
+                            dataFields,
+                            fieldLabels,
+                            xAxis,
+                            yAxis,
+                            selected: {},
+                            errorText: ''
+                        });
+                    }
+                });
+            });
+    }
+
     render() {
         const dictStr = Object.keys(this.state.dict).map(key => {
             const value = _.join(this.state.dict[key]);
             return <p>"<b>{key}</b>" : {value}</p>;
         });
-        const selected = {
-            'date': 'Any_date',
-            'z_is_latte': 'Y,N',
-            'z_exchange': 'CHI_X',
-            'z_site': 'fra,guas,ld4'
-        };
-        return (
-          <Grid>
-            <br/>{dictStr}<br/>
+        const { data, fieldLabels, xAxis, yAxis, dataFields, selected } = this.state;
+        const pivotTable = (
             <PivotTable
-                data={DATA}
-                fieldLabels={COLUMNS}
-                xAxis={X_AXIS}
-                yAxis={Y_AXIS}
-                dataFields={DATA_FIELDS}
+                data={data}
+                fieldLabels={fieldLabels}
+                xAxis={xAxis}
+                yAxis={yAxis}
+                dataFields={dataFields}
                 selectCallback={this.updateState}
                 selected={selected}
+                shouldUpdateState={this.shouldUpdateState}
             />
+        );
+        let errorText = ''
+        if (this.state.errorText.length > 0) {
+            errorText = <pre><code dangerouslySetInnerHTML={({__html: convert.toHtml(this.state.errorText)})} /></pre>;
+        }
+        this.shouldUpdateState = false;
+        return (
+          <Grid>
+            <h2>React PivotTable</h2>
+            <p>
+                Write Python code that returns a dictionary of
+                ('data', 'field_labels', 'x_axis', 'y_axis', 'data_fields') keys.
+            </p>
+            <p>See example below (You must have a jupyter notebook service running).</p>
+            <form onSubmit={(evt) => this.onSubmit(evt)}>
+                <FormGroup controlId="formControlsTextarea">
+                    <ControlLabel>Paste in your Python code here:</ControlLabel>
+                    <FormControl componentClass="textarea" ref={ref => this.pythonCode = ref}>
+                        {exampleCode.replace(/\t/g, '')}
+                    </FormControl>
+                </FormGroup>
+                <Button type="submit">
+                    Generate
+                </Button>
+            </form>
+            {errorText}
+            <br/>
+            {pivotTable}
+            <p className="lead">Selected Items:</p>
+            {dictStr.length ? dictStr : 'None.'}<br/><br/>
           </Grid>
         );
     }

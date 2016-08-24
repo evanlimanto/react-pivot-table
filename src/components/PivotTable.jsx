@@ -44,9 +44,23 @@ class PivotTable extends React.Component {
     constructor(props) {
         super(props);
 
-        const xAxis = this.props.xAxis.map(name => ({name: name, order: true}));
-        const yAxis = this.props.yAxis.map(name => ({name: name, order: true}));
-        const dataFields = this.props.dataFields.map(name => ({name: name, order: true}));
+        this.initState(props);
+
+        this.invertOrder = this.invertOrder.bind(this);
+        this.moveField = this.moveField.bind(this);
+        this.onBucketClick = this.onBucketClick.bind(this);
+        this.flipDataAxis = this.flipDataAxis.bind(this);
+    }
+
+    /**
+     * Helper function to initialize the state, given the props passed in to
+     * the component.
+     * @param {object} props - The props passed into this component.
+     */
+    initState(props) {
+        const xAxis = props.xAxis.map(name => ({name: name, order: true}));
+        const yAxis = props.yAxis.map(name => ({name: name, order: true}));
+        const dataFields = props.dataFields.map(name => ({name: name, order: true}));
         const allFields = _.concat(xAxis, yAxis, dataFields);
         const dataHeaderAxis = Y_AXIS;
         const selected = {};
@@ -62,11 +76,17 @@ class PivotTable extends React.Component {
             dataHeaderAxis,
             hasComputedInitialState: false
         };
+    }
 
-        this.invertOrder = this.invertOrder.bind(this);
-        this.moveField = this.moveField.bind(this);
-        this.onBucketClick = this.onBucketClick.bind(this);
-        this.flipDataAxis = this.flipDataAxis.bind(this);
+    /**
+     * Called whenever the props of this component is updated, as per the lifecycle of
+     * this component.
+     * @param {object} nextProps - The new props of this component.
+     */
+    componentWillReceiveProps(nextProps) {
+        if (nextProps.shouldUpdateState) {
+            this.initState(nextProps);
+        }
     }
 
     /**
