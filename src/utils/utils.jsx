@@ -54,42 +54,76 @@ export function getTableMapping(data, columnIndexes, rowIndexes, dataIndexes) {
  * a certain column, and indexes of columns to sort by in lexicographic
  * order, and returns a new sorted copy of the array.
  * @param {Array} data - The 2-D array of data.
+ * @param {Array} sortOrder - An array with the same dimensions as data, denoting its sort
+ *                            order.
  * @param {Array} fieldInfo - The array of {name, order} objects corresponding to fields.
  * @param {Function} fieldToIndex - The function mapping a field to its index.
  */
-export function sortDataRows(data, fieldInfo, fieldToIndex) {
+export function sortDataRows(data, sortOrder, fieldInfo, fieldToIndex) {
     // Transpose the data into a row order array.
-    const dataCopy = _.zip.apply(_, data);
-    // Sort with a custom compare function.
-    dataCopy.sort((a, b) => {
-        if (!_.eq(a.length, b.length)) {
-            throw new Error(`${a} and ${b} have different lengths.`);
-        }
-        for (let i = 0; i < fieldInfo.length; i++) {
-            // Denotes whether we are sorting by ascending or descending order.
-            const multiplier = (fieldInfo[i].order) ? 1 : -1;
-            const colIndex = fieldToIndex(fieldInfo[i]);
+    if (!sortOrder) {
+        const dataCopy = _.zip.apply(_, data);
+        // Sort with a custom compare function.
+        dataCopy.sort((a, b) => {
+            if (!_.eq(a.length, b.length)) {
+                throw new Error(`${a} and ${b} have different lengths.`);
+            }
+            for (let i = 0; i < fieldInfo.length; i++) {
+                // Denotes whether we are sorting by ascending or descending order.
+                const multiplier = (fieldInfo[i].order) ? 1 : -1;
+                const colIndex = fieldToIndex(fieldInfo[i]);
 
-            // We want strings that are case-insensitive prefixed by 'any_' to appear first in
-            // all columns.
-            const aIsAny = typeof a[colIndex] === 'string' && a[colIndex].toLowerCase().startsWith('any_');
-            const bIsAny = typeof b[colIndex] === 'string' && b[colIndex].toLowerCase().startsWith('any_');
-            if (aIsAny && !bIsAny) {
-                return -1;
+                // We want strings that are case-insensitive prefixed by 'any_' to appear first in
+                // all columns.
+                const aIsAny = typeof a[colIndex] === 'string' && a[colIndex].toLowerCase().startsWith('any_');
+                const bIsAny = typeof b[colIndex] === 'string' && b[colIndex].toLowerCase().startsWith('any_');
+                if (aIsAny && !bIsAny) {
+                    return -1;
+                }
+                else if (!aIsAny && bIsAny) {
+                    return 1;
+                }
+                if (a[colIndex] < b[colIndex]) {
+                    return -multiplier;
+                }
+                else if (a[colIndex] > b[colIndex]) {
+                    return multiplier;
+                }
             }
-            else if (!aIsAny && bIsAny) {
-                return 1;
+            return 0;
+        });
+        return _.unzip(dataCopy);
+    }
+    else {
+        let dataCopy = _.cloneDeep(data);
+        dataCopy = _.zip.apply(_, dataCopy);
+        dataCopy = dataCopy.map((value, index) => ({value, index}));
+        dataCopy.sort((a, b) => {
+            const indexA = a.index;
+            const indexB = b.index;
+            for (let i = 0; i < fieldInfo.length; i++) {
+                const multiplier = (fieldInfo[i].order) ? 1 : -1;
+                const colIndex = fieldToIndex(fieldInfo[i]);
+                const sortOrderA = sortOrder[colIndex][indexA];
+                const sortOrderB = sortOrder[colIndex][indexB];
+                if (sortOrderA === undefined) {
+                    return -multiplier;
+                }
+                if (sortOrderB === undefined) {
+                    return multiplier;
+                }
+                if (_.lt(sortOrderA, sortOrderB)) {
+                    return -multiplier;
+                } else if (_.gt(sortOrderA, sortOrderB)) {
+                    return multiplier;
+                }
             }
-            if (a[colIndex] < b[colIndex]) {
-                return -multiplier;
-            }
-            else if (a[colIndex] > b[colIndex]) {
-                return multiplier;
-            }
-        }
-        return 0;
-    });
-    return _.unzip(dataCopy);
+            return 0;
+        });
+        dataCopy = dataCopy.map(value => value.value);
+        dataCopy = _.unzip(dataCopy);
+        return dataCopy;
+    }
 }
 
 export function addToListInDict(dict, key, item) {

@@ -40,6 +40,7 @@ class PivotTable extends React.Component {
      * @param {array} selectCallback - The callback function triggered every time cells
      *                                 are selected.
      * @param {object} selection - The initial state of selected items in the PivotTable.
+     * @param {array} sortOrder - The lexicographic order to sort the array by.
      */
     constructor(props) {
         super(props);
@@ -537,10 +538,10 @@ class PivotTable extends React.Component {
         const rowIndices = this.state.yAxis.map(field => this.fieldToIndex(field));
         const dataIndices = this.state.dataFields.map(field => this.fieldToIndex(field));
         // Get the data sorted by column and row orders.
-        const dataByColOrder = sortDataRows(this.props.data, this.state.xAxis,
+        const dataByColOrder = sortDataRows(this.props.data, this.props.sortOrder, this.state.xAxis,
                                             (field) => this.fieldToIndex(field));
-        const dataByRowOrder = sortDataRows(this.props.data, this.state.yAxis,
-            (field) => this.fieldToIndex(field));
+        const dataByRowOrder = sortDataRows(this.props.data, this.props.sortOrder, this.state.yAxis,
+                                            (field) => this.fieldToIndex(field));
         // Compute the span widths and header values.
         const [colSpans, colFields] = this.getSpans(dataByColOrder, colIndices);
         const [rowSpans, rowFields] = this.getSpans(dataByRowOrder, rowIndices);

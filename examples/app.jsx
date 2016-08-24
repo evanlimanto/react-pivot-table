@@ -207,6 +207,7 @@ class App extends React.Component {
                 selectCallback={this.updateState}
                 selected={selected}
                 shouldUpdateState={this.shouldUpdateState}
+                sortOrder={data}
             />
         );
         let errorText = ''
