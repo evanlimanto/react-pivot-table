@@ -1,3 +1,4 @@
+/*
 var gulp = require('gulp'),
     addStandardGulpTasks = require('djs-dev-tools').configureGulp.default,
     appTypes = require('djs-dev-tools').appTypes,
@@ -26,9 +27,37 @@ addStandardGulpTasks(gulp,
             },
             devServerPort: 8081
         },
-        lint: {
-            glob: ['src/**/*.jsx']
-        }
     }
 );
+*/
+var gulp = require('gulp');
+var webpack = require('webpack-stream');
 
+gulp.task('default', function() {
+    return gulp.src('examples/app.jsx')
+        .pipe(webpack(
+        {
+            output: {
+                filename: 'bundle.js'
+            },
+            devtool: 'source-map',
+            module: {
+                loaders: [
+                    {
+                        test: /\.jsx$/,
+                        loader: 'babel-loader',
+                        query: {
+                            presets: ['es2015', 'react', 'stage-1'],
+                            plugins: ['transform-runtime']
+                        }
+                    },
+                    {
+                        test: /\.js$/,
+                        loader: 'script-loader',
+                    }
+                ]
+            }
+        }
+        ))
+        .pipe(gulp.dest('examples/'));
+});

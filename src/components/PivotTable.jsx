@@ -1,6 +1,4 @@
 /**
- * Main web component for the deshaw.util.pivot_table python module.
- *
  * Author: limanto
  */
 
