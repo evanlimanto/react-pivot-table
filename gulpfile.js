@@ -1,31 +1,31 @@
-var gulp = require('gulp'),
-    addStandardGulpTasks = require('djs-dev-tools').configureGulp.default,
-    appTypes = require('djs-dev-tools').appTypes,
-    environments = require('djs-utils').environments;
+var gulp = require('gulp');
+var webpack = require('webpack-stream');
 
-process.env.NODE_ENV = process.env.NODE_ENV || environments.DEVELOPMENT;
-
-addStandardGulpTasks(gulp,
-    {
-        maindir: __dirname,
-        types: [appTypes.TYPE_REACT],
-        copiedFiles: [
-            __dirname + '/public/index.html'
-        ],
-        taskOptions: {
-            webpack: {
-                config: {
-                    entry: __dirname + '/src/app.jsx'
-                }
-            }
-        },
-        webpack: {
-            descoenv: {js: __dirname + '/descoenv.js', dest: __dirname + '/src'},
-            config: {
-                entry: __dirname + '/src/app.jsx'
+gulp.task('default', function() {
+    return gulp.src('examples/app.jsx')
+        .pipe(webpack(
+        {
+            output: {
+                filename: 'bundle.js'
             },
-            devServerPort: 8081
+            devtool: 'source-map',
+            module: {
+                loaders: [
+                    {
+                        test: /\.jsx$/,
+                        loader: 'babel-loader',
+                        query: {
+                            presets: ['es2015', 'react', 'stage-1'],
+                            plugins: ['transform-runtime']
+                        }
+                    },
+                    {
+                        test: /\.js$/,
+                        loader: 'script-loader',
+                    }
+                ]
+            }
         }
-    }
-);
-
+        ))
+        .pipe(gulp.dest('examples/'));
+});
